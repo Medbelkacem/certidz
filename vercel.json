@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "cleanUrls": true,
+  "trailingSlash": false,
   "installCommand": "npx --yes pnpm@latest install --no-frozen-lockfile",
   "buildCommand": "npx --yes pnpm@latest exec turbo run build --filter=@certidz/web",
   "outputDirectory": "apps/web/out",
