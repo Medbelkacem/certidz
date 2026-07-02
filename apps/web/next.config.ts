@@ -29,7 +29,9 @@ const securityHeaders = [
 ] as const;
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Standalone output powers the self-hosted Docker image. Vercel provides its
+  // own build target, so skip it there (VERCEL=1 is set during Vercel builds).
+  output: process.env.VERCEL ? undefined : "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ["@certidz/ui"],
