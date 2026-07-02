@@ -28,21 +28,30 @@ const securityHeaders = [
   }
 ] as const;
 
+// Build targets:
+//  - Vercel  → static export (`out/`), served as plain static files. The app is
+//    a self-contained frontend on mock data, so no server runtime is required.
+//    Security headers are applied by Vercel via the root `vercel.json`.
+//  - Docker  → `standalone` server output for self-hosting.
+//  - Local   → default (`next start` / `next dev`), with headers() active.
+const isVercel = !!process.env.VERCEL;
+
 const nextConfig: NextConfig = {
-  // Standalone output powers the self-hosted Docker image. Vercel provides its
-  // own build target, so skip it there (VERCEL=1 is set during Vercel builds).
-  output: process.env.VERCEL ? undefined : "standalone",
+  output: isVercel ? "export" : "standalone",
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ["@certidz/ui"],
-  async headers() {
-    return [
-      {
-        source: "/(.*)",
-        headers: [...securityHeaders]
-      }
-    ];
-  }
+  // Static export has no image optimization server.
+  images: { unoptimized: true },
+  // headers() is not supported with `output: export`; on Vercel the same
+  // headers are configured in vercel.json instead.
+  ...(isVercel
+    ? {}
+    : {
+        async headers() {
+          return [{ source: "/(.*)", headers: [...securityHeaders] }];
+        }
+      })
 };
 
 export default nextConfig;
