@@ -43,3 +43,4 @@ playwright-report/
 *.p12
 *.key
 !**/test-fixtures/**/*.pem
+.vercel
