@@ -1,0 +1,12 @@
+# Staging environment overrides (non-secret only).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: certidz-config
+data:
+  APP_URL: "https://staging.certidz.dz"
+  API_URL: "https://staging.certidz.dz/api"
+  SESSION_COOKIE_DOMAIN: "staging.certidz.dz"
+  WEBAUTHN_RP_ID: "staging.certidz.dz"
+  WEBAUTHN_ORIGIN: "https://staging.certidz.dz"
+  LOG_LEVEL: "debug"

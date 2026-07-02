@@ -1,0 +1,248 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Dark mode is driven by the `.dark` class set by next-themes. */
+@custom-variant dark (&:is(.dark *));
+
+/* ------------------------------------------------------------------ */
+/* Semantic tokens — light                                             */
+/* ------------------------------------------------------------------ */
+:root {
+  --background: #f6f8fb;
+  --foreground: #0a1628;
+  --card: #ffffff;
+  --card-foreground: #0a1628;
+  --popover: #ffffff;
+  --popover-foreground: #0a1628;
+  --primary: #0a1628;
+  --primary-foreground: #f6f8fb;
+  --secondary: #e3f4ec;
+  --secondary-foreground: #065f46;
+  --muted: #eef2f7;
+  --muted-foreground: #5b6b80;
+  --accent: #c9a227;
+  --accent-foreground: #211a04;
+  --destructive: #dc2626;
+  --destructive-foreground: #fef2f2;
+  --success: #059669;
+  --warning: #d97706;
+  --border: #e1e7ef;
+  --input: #d5dde8;
+  --ring: #059669;
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(10, 22, 40, 0.08);
+}
+
+/* ------------------------------------------------------------------ */
+/* Semantic tokens — dark                                              */
+/* ------------------------------------------------------------------ */
+.dark {
+  --background: #070d1a;
+  --foreground: #e8eef6;
+  --card: #0d1729;
+  --card-foreground: #e8eef6;
+  --popover: #101c33;
+  --popover-foreground: #e8eef6;
+  --primary: #34d399;
+  --primary-foreground: #04150e;
+  --secondary: #12233c;
+  --secondary-foreground: #a7f3d0;
+  --muted: #131f36;
+  --muted-foreground: #8c9bb3;
+  --accent: #d4af37;
+  --accent-foreground: #1a1405;
+  --destructive: #f87171;
+  --destructive-foreground: #1f0808;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --border: #1c2a45;
+  --input: #243453;
+  --ring: #34d399;
+  --glass-bg: rgba(13, 23, 41, 0.6);
+  --glass-border: rgba(232, 238, 246, 0.08);
+}
+
+/* ------------------------------------------------------------------ */
+/* Design tokens (Tailwind v4 theme)                                   */
+/* ------------------------------------------------------------------ */
+@theme {
+  /* Brand — deep navy (trust, institutional) */
+  --color-navy-50: #f0f5fa;
+  --color-navy-100: #d9e4f2;
+  --color-navy-200: #b4c9e4;
+  --color-navy-300: #82a5cf;
+  --color-navy-400: #4f7cb8;
+  --color-navy-500: #2a5799;
+  --color-navy-600: #1e4276;
+  --color-navy-700: #16305a;
+  --color-navy-800: #10213d;
+  --color-navy-900: #0a1628;
+  --color-navy-950: #060d1f;
+
+  /* Brand — emerald (Algeria green, success, signature valid) */
+  --color-emerald-50: #ecfdf5;
+  --color-emerald-100: #d1fae5;
+  --color-emerald-200: #a7f3d0;
+  --color-emerald-300: #6ee7b7;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-emerald-700: #047857;
+  --color-emerald-800: #065f46;
+  --color-emerald-900: #064e3b;
+  --color-emerald-950: #022c22;
+
+  /* Brand — gold (premium accent, seals & badges) */
+  --color-gold-50: #fbf7eb;
+  --color-gold-100: #f5ebc8;
+  --color-gold-200: #ebd795;
+  --color-gold-300: #dfbe5c;
+  --color-gold-400: #d4af37;
+  --color-gold-500: #c9a227;
+  --color-gold-600: #a88427;
+  --color-gold-700: #86671f;
+  --color-gold-800: #6b521e;
+  --color-gold-900: #59441d;
+  --color-gold-950: #332507;
+
+  /* Typography */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, "Times New Roman",
+    serif;
+
+  /* Radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  /* Shadows */
+  --shadow-glass: 0 8px 32px rgba(6, 13, 31, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-glow-emerald: 0 0 40px rgba(16, 185, 129, 0.25);
+  --shadow-glow-gold: 0 0 40px rgba(201, 162, 39, 0.2);
+}
+
+/* Map semantic CSS variables into Tailwind color utilities. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--color-emerald-500) 30%, transparent);
+  }
+
+  /* WCAG 2.2 — always-visible focus indication */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilities                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Glassmorphism card surface (dashboard, navbar) */
+@utility glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass);
+}
+
+/* Subtle top border shimmer for hero panels */
+@utility glass-edge {
+  position: relative;
+}
+.glass-edge::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--color-gold-400) 60%, transparent),
+    transparent
+  );
+  pointer-events: none;
+}
+
+/* Display serif for landing headlines */
+@utility font-display {
+  font-family: var(--font-display);
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+}
+
+/* Deep-navy hero gradient used on marketing + auth brand panels */
+@utility bg-hero-gradient {
+  background:
+    radial-gradient(60rem 30rem at 15% -10%, rgba(16, 185, 129, 0.14), transparent 60%),
+    radial-gradient(50rem 28rem at 90% 10%, rgba(201, 162, 39, 0.1), transparent 55%),
+    linear-gradient(180deg, #060d1f 0%, #0a1628 55%, #0d1c33 100%);
+}
+
+/* Thin scrollbars for panels */
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent)
+    transparent;
+}

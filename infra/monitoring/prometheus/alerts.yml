@@ -1,0 +1,222 @@
+# =============================================================================
+# CertiDZ by HISN — Prometheus alerting rules
+# -----------------------------------------------------------------------------
+# Symptom-based, SLO-aligned rules. Every alert carries a `severity` label
+# (critical | warning) that Alertmanager routes on, and a `runbook_url`
+# annotation pointing at docs/operations/RUNBOOKS.md.
+#
+# SLOs (see docs/operations/MONITORING.md): 99.9% availability, API p95 < 500ms,
+# signature completion < 30s.
+# =============================================================================
+
+groups:
+  # ===========================================================================
+  # API service health
+  # ===========================================================================
+  - name: certidz-api
+    rules:
+      - alert: APIHighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api",status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{service="api"}[5m]))
+          ) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+          service: api
+        annotations:
+          summary: "API 5xx error rate above 2% ({{ $value | humanizePercentage }})"
+          description: >-
+            The CertiDZ API is returning 5xx for more than 2% of requests over the
+            last 5 minutes. This burns the 99.9% availability error budget.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-1--api-down"
+
+      - alert: APIHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket{service="api"}[5m])) by (le)
+          ) > 1.5
+        for: 10m
+        labels:
+          severity: warning
+          service: api
+        annotations:
+          summary: "API p95 latency above 1.5s ({{ $value | humanizeDuration }})"
+          description: >-
+            The API p95 request latency exceeds 1.5s for 10 minutes (SLO target is
+            p95 < 500ms). Investigate DB/queue saturation or a hot endpoint.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-1--api-down"
+
+  # ===========================================================================
+  # Signing pipeline
+  # ===========================================================================
+  - name: certidz-signing
+    rules:
+      - alert: SignatureQueueBacklog
+        expr: |
+          sum(bullmq_queue_waiting{queue="sign"}) > 100
+        for: 5m
+        labels:
+          severity: critical
+          service: signing
+        annotations:
+          summary: "Signature queue backlog: {{ $value }} jobs waiting"
+          description: >-
+            The BullMQ `sign` queue has more than 100 waiting jobs for 5 minutes.
+            Signature completion SLO (< 30s) is at risk. Check sign-worker health,
+            HSM availability, and TSA reachability.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-3--queue-backlog"
+
+      - alert: SignatureDLQNotEmpty
+        expr: |
+          sum(bullmq_queue_failed{queue=~"sign|pki"}) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: signing
+        annotations:
+          summary: "Dead-letter jobs present in {{ $labels.queue }}"
+          description: >-
+            One or more signing/PKI jobs have exhausted retries and landed in the
+            DLQ. A qualified signature may be stuck pending timestamp. Inspect and
+            replay via Bull Board (/admin/queues).
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-3--queue-backlog"
+
+  # ===========================================================================
+  # Data plane — PostgreSQL & Redis
+  # ===========================================================================
+  - name: certidz-data
+    rules:
+      - alert: PostgresReplicationLag
+        expr: |
+          pg_replication_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "Postgres replication lag {{ $value | humanizeDuration }} (> 30s)"
+          description: >-
+            Standby replication lag exceeds 30s, breaching the RPO 15-min budget's
+            safety margin. A failover now could lose data. Check WAL sender/receiver,
+            network, and standby I/O.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-2--postgres-failover"
+
+      - alert: RedisDown
+        expr: |
+          redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is unreachable"
+          description: >-
+            The redis-exporter reports Redis down for 1 minute. BullMQ queues,
+            rate limits, sessions cache, and CQRS counters are affected. The signing
+            pipeline will stall.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-3--queue-backlog"
+
+  # ===========================================================================
+  # Kubernetes workload health
+  # ===========================================================================
+  - name: certidz-kubernetes
+    rules:
+      - alert: PodCrashLooping
+        expr: |
+          increase(kube_pod_container_status_restarts_total{namespace=~"certidz|certidz-staging|data"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash-looping"
+          description: >-
+            Container {{ $labels.container }} restarted more than 3 times in 15
+            minutes. Check `kubectl logs --previous` and recent deploys.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-1--api-down"
+
+      - alert: TargetDown
+        expr: |
+          up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Scrape target {{ $labels.job }} / {{ $labels.instance }} is down"
+          description: >-
+            Prometheus has failed to scrape {{ $labels.job }} ({{ $labels.instance }})
+            for 5 minutes. Either the target is unhealthy or the exporter is down.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-1--api-down"
+
+      - alert: DiskPressure
+        expr: |
+          (
+            1 - (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+              /
+              node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            )
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: node
+        annotations:
+          summary: "Disk usage above 85% on {{ $labels.instance }} ({{ $labels.mountpoint }})"
+          description: >-
+            Filesystem {{ $labels.mountpoint }} on {{ $labels.instance }} is over
+            85% full for 10 minutes. Postgres WAL, document uploads, or logs may
+            fill the volume. Expand or prune before it reaches 100%.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-6--s3--object-store-outage"
+
+  # ===========================================================================
+  # Platform TLS / uptime (blackbox-exporter)
+  # ===========================================================================
+  - name: certidz-tls-uptime
+    rules:
+      - alert: CertificateExpiringSoon
+        expr: |
+          (probe_ssl_earliest_cert_expiry - time()) < (14 * 24 * 3600)
+        for: 30m
+        labels:
+          severity: warning
+          service: tls
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires in < 14 days"
+          description: >-
+            The public TLS certificate for {{ $labels.instance }} expires in
+            {{ $value | humanizeDuration }}. cert-manager should auto-renew; if it
+            has not, renew manually before expiry to avoid an outage.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-4--certificate--tls-expiry"
+
+      - alert: CertificateExpiringCritical
+        expr: |
+          (probe_ssl_earliest_cert_expiry - time()) < (3 * 24 * 3600)
+        for: 10m
+        labels:
+          severity: critical
+          service: tls
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires in < 3 days"
+          description: >-
+            Certificate renewal for {{ $labels.instance }} has not occurred and it
+            expires within 3 days. Escalate immediately.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-4--certificate--tls-expiry"
+
+      - alert: EndpointDown
+        expr: |
+          probe_success == 0
+        for: 3m
+        labels:
+          severity: critical
+          service: uptime
+        annotations:
+          summary: "Endpoint {{ $labels.instance }} failing external probe"
+          description: >-
+            The blackbox HTTP probe for {{ $labels.instance }} has failed for 3
+            minutes. If this is the verification portal, trust-verification is
+            unavailable to the public — treat as Sev1.
+          runbook_url: "https://github.com/hisn/certidz/blob/main/docs/operations/RUNBOOKS.md#runbook-1--api-down"

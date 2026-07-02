@@ -1,0 +1,60 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: certidz
+  labels:
+    app.kubernetes.io/part-of: certidz
+  annotations:
+    # --- TLS via cert-manager -------------------------------------------------
+    # The ClusterIssuer must exist cluster-wide. For sovereign/on-prem clusters
+    # without outbound ACME, swap for an internal CA issuer (cert-manager CA
+    # issuer backed by the organisation's PKI).
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    # --- Transport hardening ---------------------------------------------------
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+    # Signed document uploads: bound request size to stop memory-exhaustion abuse.
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    # --- Rate limiting (edge tier; API applies its own per-user limits too) ----
+    # ~100 req/s per client IP with burst multiplier 5 -> absorbs page loads,
+    # slows credential stuffing and enumeration.
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+    # --- Security headers (applied to every response) ---------------------------
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Strict-Transport-Security: max-age=63072000; includeSubDomains; preload";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()";
+      more_set_headers "X-XSS-Protection: 0";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.certidz.dz
+      secretName: certidz-tls   # created/renewed automatically by cert-manager
+  rules:
+    - host: app.certidz.dz
+      http:
+        paths:
+          # API is served on the same host under /api to keep cookies first-party
+          # (SameSite=Strict works, no CORS surface).
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: certidz-api
+                port:
+                  name: http
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: certidz-web
+                port:
+                  name: http

@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: certidz-config
+  labels:
+    app.kubernetes.io/part-of: certidz
+data:
+  # ---------------------------------------------------------------------------
+  # NON-SECRET configuration only. Anything with credential material lives in
+  # the certidz-secrets Secret (delivered by External Secrets Operator / Vault —
+  # see docs/operations/DEPLOYMENT.md#secrets-management).
+  # ---------------------------------------------------------------------------
+  NODE_ENV: "production"
+  APP_URL: "https://app.certidz.dz"
+  API_URL: "https://app.certidz.dz/api"
+
+  # Data services. Defaults point at in-cluster services in the "data" namespace
+  # (sovereign/on-prem pattern). Cloud deployments override these hostnames via
+  # overlay patches to point at managed endpoints (RDS/Cloud SQL/etc.).
+  ELASTICSEARCH_URL: "http://elasticsearch.data.svc.cluster.local:9200"
+
+  # Object storage endpoint (MinIO in-cluster for sovereign; S3 endpoint in cloud).
+  S3_ENDPOINT: "http://minio.data.svc.cluster.local:9000"
+  S3_REGION: "us-east-1"
+  S3_BUCKET_DOCUMENTS: "certidz-documents"
+  S3_BUCKET_EVIDENCE: "certidz-evidence"
+
+  # Auth (non-secret parts)
+  JWT_ACCESS_TTL: "900"
+  JWT_REFRESH_TTL: "2592000"
+  SESSION_COOKIE_DOMAIN: "app.certidz.dz"
+
+  # WebAuthn / passkeys
+  WEBAUTHN_RP_ID: "app.certidz.dz"
+  WEBAUTHN_RP_NAME: "CertiDZ"
+  WEBAUTHN_ORIGIN: "https://app.certidz.dz"
+
+  # PKI endpoints (public, non-secret)
+  TSA_URL: "https://tsa.certidz.dz/tsr"
+  OCSP_RESPONDER_URL: "https://ocsp.certidz.dz"
+
+  # Observability
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability.svc.cluster.local:4318"
+  OTEL_SERVICE_NAMESPACE: "certidz"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+
+  # Mail relay (credentials in Secret)
+  SMTP_HOST: "smtp-relay.certidz.dz"
+  SMTP_PORT: "587"
+
+  # AI defaults (API key in Secret)
+  AI_DEFAULT_MODEL: "anthropic/claude-sonnet-4-6"
+  AI_OCR_MODEL: "anthropic/claude-haiku-4-5-20251001"

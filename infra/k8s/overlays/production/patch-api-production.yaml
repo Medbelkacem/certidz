@@ -1,0 +1,36 @@
+# Production tier for the API:
+#  - 3 replicas minimum (HPA floor matches)
+#  - doubled resources
+#  - topologySpreadConstraints: hard spread across nodes, soft across zones,
+#    so neither a node loss nor a zone loss removes all signing capacity.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: certidz-api
+spec:
+  replicas: 3
+  template:
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: certidz-api
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          # Soft for zones: single-zone sovereign datacenters must still schedule.
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: certidz-api
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi

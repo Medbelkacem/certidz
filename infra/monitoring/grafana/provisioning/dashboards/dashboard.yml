@@ -1,0 +1,22 @@
+# =============================================================================
+# CertiDZ by HISN — Grafana dashboard provider
+# -----------------------------------------------------------------------------
+# Tells Grafana to load dashboard JSON files from disk. The CD pipeline mounts
+# infra/monitoring/grafana/dashboards/ at /var/lib/grafana/dashboards/certidz.
+# Dashboards are managed as code — edits in the UI are overwritten on restart
+# unless `allowUiUpdates` is true. Reference: docs/operations/MONITORING.md
+# =============================================================================
+apiVersion: 1
+
+providers:
+  - name: certidz
+    orgId: 1
+    folder: CertiDZ
+    folderUid: certidz-folder
+    type: file
+    disableDeletion: false
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards/certidz
+      foldersFromFilesStructure: false

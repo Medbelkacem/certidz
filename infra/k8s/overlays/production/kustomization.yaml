@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Production: app.certidz.dz. Larger resource tier, 3+ replicas, hard
+# topology spreading across nodes and zones, wider HPA range.
+namespace: certidz
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/environment: production
+
+images:
+  # NEVER "latest" in production. CD pins the exact release tag (and digest)
+  # promoted from staging, e.g.:
+  #   kustomize edit set image ghcr.io/hisn/certidz-api=ghcr.io/hisn/certidz-api:v1.4.2@sha256:<digest>
+  - name: ghcr.io/hisn/certidz-api
+    newTag: v1.0.0
+  - name: ghcr.io/hisn/certidz-web
+    newTag: v1.0.0
+
+patches:
+  - path: patch-api-production.yaml
+    target:
+      kind: Deployment
+      name: certidz-api
+  - path: patch-web-production.yaml
+    target:
+      kind: Deployment
+      name: certidz-web
+  - path: patch-hpa-api.yaml
+    target:
+      kind: HorizontalPodAutoscaler
+      name: certidz-api
+  - path: patch-hpa-web.yaml
+    target:
+      kind: HorizontalPodAutoscaler
+      name: certidz-web
+  - path: patch-pdb.yaml
+    target:
+      kind: PodDisruptionBudget
+      name: certidz-api

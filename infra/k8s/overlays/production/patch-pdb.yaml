@@ -1,0 +1,8 @@
+# With 3+ replicas in production, require 2 API pods to survive any voluntary
+# disruption (node drain during upgrades) — keeps signing capacity redundant.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: certidz-api
+spec:
+  minAvailable: 2

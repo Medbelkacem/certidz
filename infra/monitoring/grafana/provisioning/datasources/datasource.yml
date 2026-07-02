@@ -1,0 +1,64 @@
+# =============================================================================
+# CertiDZ by HISN — Grafana datasource provisioning
+# -----------------------------------------------------------------------------
+# Auto-provisioned on Grafana start. Prometheus is the default; Loki (logs) and
+# Tempo (traces) are wired so metrics ↔ logs ↔ traces correlate via trace_id
+# exemplars. Reference: docs/operations/MONITORING.md
+# =============================================================================
+apiVersion: 1
+
+# Remove stale datasources that are no longer in this file on startup.
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
+datasources:
+  - name: Prometheus
+    uid: certidz-prometheus
+    type: prometheus
+    access: proxy
+    orgId: 1
+    url: http://prometheus.observability.svc.cluster.local:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      prometheusType: Prometheus
+      timeInterval: 15s
+      # Link metric exemplars to traces in Tempo.
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: certidz-tempo
+
+  - name: Loki
+    uid: certidz-loki
+    type: loki
+    access: proxy
+    orgId: 1
+    url: http://loki.observability.svc.cluster.local:3100
+    editable: false
+    jsonData:
+      maxLines: 1000
+      # Jump from a log line's trace_id field straight into the trace.
+      derivedFields:
+        - name: TraceID
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: "$${__value.raw}"
+          datasourceUid: certidz-tempo
+
+  - name: Tempo
+    uid: certidz-tempo
+    type: tempo
+    access: proxy
+    orgId: 1
+    url: http://tempo.observability.svc.cluster.local:3200
+    editable: false
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: certidz-loki
+        filterByTraceID: true
+      tracesToMetrics:
+        datasourceUid: certidz-prometheus
+      serviceMap:
+        datasourceUid: certidz-prometheus

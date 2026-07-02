@@ -1,0 +1,203 @@
+# =============================================================================
+# Zero-trust pod networking for the certidz namespace.
+# Model: default-deny everything, then allow only the flows the product needs:
+#
+#   ingress-nginx ──> web:3000
+#   ingress-nginx ──> api:4000
+#   web ──> api:4000            (server-side rendering / route handlers)
+#   api ──> postgres:5432, redis:6379, elasticsearch:9200, minio:9000
+#   api ──> HSM network 10.60.0.0/24:3001 (signing)  [sovereign deployments]
+#   all ──> kube-dns:53
+#   api/web ──> otel-collector:4318, 443 egress (OAuth, Stripe, TSA, SMTP 587)
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  labels:
+    app.kubernetes.io/part-of: certidz
+spec:
+  # Empty podSelector = every pod in the namespace. No rules = deny all
+  # ingress AND egress unless another policy explicitly allows it.
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  labels:
+    app.kubernetes.io/part-of: certidz
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-web
+  labels:
+    app.kubernetes.io/part-of: certidz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: certidz-web
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+    # Prometheus scrapes /api/metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-api
+  labels:
+    app.kubernetes.io/part-of: certidz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: certidz-api
+  policyTypes:
+    - Ingress
+  ingress:
+    # Edge traffic (path /api routed by the Ingress)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 4000
+    # SSR calls from the web pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: certidz-web
+      ports:
+        - protocol: TCP
+          port: 4000
+    # Prometheus scrapes /api/v1/metrics
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-web-egress
+  labels:
+    app.kubernetes.io/part-of: certidz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: certidz-web
+  policyTypes:
+    - Egress
+  egress:
+    # web -> api (in-cluster)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: certidz-api
+      ports:
+        - protocol: TCP
+          port: 4000
+    # web -> OTel collector (traces)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4318
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-egress
+  labels:
+    app.kubernetes.io/part-of: certidz
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: certidz-api
+  policyTypes:
+    - Egress
+  egress:
+    # api -> data services (in-cluster "data" namespace for sovereign deploys;
+    # for managed cloud databases replace with an ipBlock of the DB subnet).
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: data
+      ports:
+        - protocol: TCP
+          port: 5432   # PostgreSQL
+        - protocol: TCP
+          port: 6379   # Redis (cache, BullMQ queues)
+        - protocol: TCP
+          port: 9200   # Elasticsearch
+        - protocol: TCP
+          port: 9000   # MinIO / S3
+    # api -> OTel collector (traces + metrics)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+      ports:
+        - protocol: TCP
+          port: 4318
+    # api -> network HSM segment (sovereign deployments; CIDR of the HSM VLAN).
+    # Tightly scoped: only the PKCS#11-over-TCP port of the HSM appliances.
+    - to:
+        - ipBlock:
+            cidr: 10.60.0.0/24
+      ports:
+        - protocol: TCP
+          port: 3001
+    # api -> internet HTTPS (OAuth providers, Stripe, TSA/OCSP, AI gateway).
+    # Private ranges are excluded so a compromised pod cannot pivot laterally.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.169.254/32   # cloud metadata service — never reachable
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 587   # SMTP submission (STARTTLS)

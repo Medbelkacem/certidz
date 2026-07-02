@@ -1,0 +1,14 @@
+# Staging hostname + ACME staging issuer (avoids Let's Encrypt prod rate limits
+# while the environment is torn up/down frequently).
+- op: replace
+  path: /metadata/annotations/cert-manager.io~1cluster-issuer
+  value: letsencrypt-staging
+- op: replace
+  path: /spec/tls/0/hosts/0
+  value: staging.certidz.dz
+- op: replace
+  path: /spec/tls/0/secretName
+  value: certidz-staging-tls
+- op: replace
+  path: /spec/rules/0/host
+  value: staging.certidz.dz

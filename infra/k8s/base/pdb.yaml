@@ -1,0 +1,28 @@
+# PodDisruptionBudgets: keep the signature platform serving during voluntary
+# disruptions (node drains, cluster upgrades). With minAvailable: 1 and
+# maxUnavailable: 0 rollout strategy, we never drop to zero ready pods.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: certidz-api
+  labels:
+    app.kubernetes.io/name: certidz-api
+    app.kubernetes.io/part-of: certidz
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: certidz-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: certidz-web
+  labels:
+    app.kubernetes.io/name: certidz-web
+    app.kubernetes.io/part-of: certidz
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: certidz-web

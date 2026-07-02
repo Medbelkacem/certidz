@@ -1,0 +1,1130 @@
+// ---------------------------------------------------------------------------
+// CertiDZ by HISN — production data model
+// Multi-tenant digital trust platform: e-signatures, PKI, identity, workflows.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = []
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum MfaFactorType {
+  TOTP
+  SMS
+  EMAIL
+}
+
+enum OAuthProvider {
+  GOOGLE
+  MICROSOFT
+  GITHUB
+}
+
+enum OrgPlan {
+  FREE
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  COMPLIANCE_OFFICER
+  MANAGER
+  MEMBER
+  AUDITOR
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum DocumentStatus {
+  UPLOADING
+  ACTIVE
+  ARCHIVED
+  DELETED
+}
+
+enum EnvelopeStatus {
+  DRAFT
+  SENT
+  IN_PROGRESS
+  COMPLETED
+  DECLINED
+  VOIDED
+  EXPIRED
+}
+
+enum SigningOrder {
+  SEQUENTIAL
+  PARALLEL
+}
+
+enum SignerStatus {
+  PENDING
+  NOTIFIED
+  VIEWED
+  CONSENTED
+  SIGNED
+  DECLINED
+}
+
+enum SignerChannel {
+  EMAIL
+  SMS
+  IN_APP
+  API
+}
+
+enum SignerAuthMethod {
+  NONE
+  EMAIL_OTP
+  SMS_OTP
+  ID_VERIFICATION
+  CERTIFICATE
+}
+
+enum SignatureFieldType {
+  SIGNATURE
+  INITIALS
+  DATE
+  TEXT
+  CHECKBOX
+}
+
+enum SignatureType {
+  SIMPLE
+  ADVANCED
+  QUALIFIED
+}
+
+enum CertificateStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum CertificateType {
+  ROOT_CA
+  ISSUING_CA
+  END_ENTITY
+  TIMESTAMPING
+}
+
+enum KeyAlgorithm {
+  RSA_2048
+  RSA_4096
+  EC_P256
+  EC_P384
+}
+
+enum CertificateRequestStatus {
+  PENDING
+  APPROVED
+  ISSUED
+  REJECTED
+}
+
+enum RevocationReason {
+  UNSPECIFIED
+  KEY_COMPROMISE
+  CA_COMPROMISE
+  AFFILIATION_CHANGED
+  SUPERSEDED
+  CESSATION_OF_OPERATION
+  PRIVILEGE_WITHDRAWN
+}
+
+enum IdentityVerificationStatus {
+  CREATED
+  PENDING_DOCUMENTS
+  PROCESSING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+enum IdentityVerificationMethod {
+  DOCUMENT_ONLY
+  DOCUMENT_AND_SELFIE
+  DOCUMENT_SELFIE_LIVENESS
+  NFC_CHIP
+}
+
+enum IdentityDocumentType {
+  PASSPORT
+  NATIONAL_ID
+  DRIVER_LICENSE
+}
+
+enum WorkflowStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum WorkflowStepType {
+  APPROVAL
+  SIGNATURE
+  NOTIFICATION
+  CONDITION
+  WEBHOOK
+  DELAY
+  TASK
+}
+
+enum WorkflowRunStatus {
+  PENDING
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowRunStepStatus {
+  PENDING
+  RUNNING
+  WAITING
+  COMPLETED
+  SKIPPED
+  FAILED
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  READ
+  FAILED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+  EXHAUSTED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum UsageMetric {
+  ENVELOPES_SENT
+  DOCUMENTS_STORED_MB
+  API_CALLS
+  IDENTITY_VERIFICATIONS
+  AI_TOKENS
+  SEATS
+}
+
+// ===========================================================================
+// Identity & access
+// ===========================================================================
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  emailVerified DateTime?
+  /// argon2id hash; null for OAuth-only accounts
+  passwordHash  String?
+  firstName     String
+  lastName      String
+  phone         String?
+  avatarUrl     String?
+  locale        String     @default("fr-DZ")
+  timezone      String     @default("Africa/Algiers")
+  status        UserStatus @default(PENDING_VERIFICATION)
+  lastLoginAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  sessions              Session[]
+  refreshTokens         RefreshToken[]
+  mfaFactors            MfaFactor[]
+  webauthnCredentials   WebauthnCredential[]
+  oauthAccounts         OAuthAccount[]
+  memberships           Membership[]
+  teamMemberships       TeamMember[]
+  documentsCreated      Document[]             @relation("DocumentCreatedBy")
+  envelopesCreated      Envelope[]             @relation("EnvelopeCreatedBy")
+  envelopeSigners       EnvelopeSigner[]
+  signatures            Signature[]
+  certificates          Certificate[]
+  certificateRequests   CertificateRequest[]
+  identityVerifications IdentityVerification[]
+  tasksAssigned         Task[]                 @relation("TaskAssignee")
+  tasksCreated          Task[]                 @relation("TaskCreatedBy")
+  comments              Comment[]
+  notifications         Notification[]
+  apiKeysCreated        ApiKey[]
+  invitationsSent       Membership[]           @relation("MembershipInvitedBy")
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip         String?
+  userAgent  String?
+  device     String?
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  refreshTokens RefreshToken[]
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Refresh tokens are rotated on every use. `revokedAt` + `replacedById`
+/// enable token-reuse detection: presenting an already-rotated token
+/// revokes the whole session family.
+model RefreshToken {
+  id           String    @id @default(cuid())
+  /// sha256 of the opaque token — the raw token is never stored
+  tokenHash    String    @unique
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId    String
+  session      Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @unique
+  replacedBy   RefreshToken? @relation("TokenRotation", fields: [replacedById], references: [id])
+  replaces     RefreshToken? @relation("TokenRotation")
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([expiresAt])
+}
+
+model MfaFactor {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        MfaFactorType
+  /// TOTP secret (encrypted at rest via KMS in production — TODO)
+  secret      String
+  label       String?
+  verifiedAt  DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@unique([userId, type, label])
+  @@index([userId])
+}
+
+model WebauthnCredential {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId    String   @unique
+  publicKey       Bytes
+  counter         BigInt   @default(0)
+  deviceType      String?
+  backedUp        Boolean  @default(false)
+  transports      String[]
+  friendlyName    String?
+  lastUsedAt      DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+}
+
+model OAuthAccount {
+  id             String        @id @default(cuid())
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider       OAuthProvider
+  providerUserId String
+  email          String?
+  accessToken    String?
+  refreshToken   String?
+  expiresAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@index([userId])
+}
+
+// ===========================================================================
+// Multi-tenancy
+// ===========================================================================
+
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  plan      OrgPlan   @default(FREE)
+  status    OrgStatus @default(ACTIVE)
+  /// Tenant-level configuration: branding, signature policies, retention
+  /// defaults, allowed auth methods, etc.
+  settings  Json      @default("{}")
+  logoUrl   String?
+  country   String    @default("DZ")
+  taxId     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  memberships           Membership[]
+  teams                 Team[]
+  documents             Document[]
+  envelopes             Envelope[]
+  certificates          Certificate[]
+  certificateRequests   CertificateRequest[]
+  identityVerifications IdentityVerification[]
+  workflows             Workflow[]
+  workflowRuns          WorkflowRun[]
+  tasks                 Task[]
+  apiKeys               ApiKey[]
+  webhooks              Webhook[]
+  auditEvents           AuditEvent[]
+  subscriptions         Subscription[]
+  invoices              Invoice[]
+  usageRecords          UsageRecord[]
+  featureFlags          FeatureFlag[]
+  notifications         Notification[]
+
+  @@index([plan])
+  @@index([status])
+}
+
+model Membership {
+  id          String           @id @default(cuid())
+  orgId       String
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        MembershipRole   @default(MEMBER)
+  status      MembershipStatus @default(INVITED)
+  invitedById String?
+  invitedBy   User?            @relation("MembershipInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  inviteToken String?          @unique
+  inviteEmail String?
+  acceptedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@index([orgId, role])
+}
+
+model Team {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  members TeamMember[]
+
+  @@unique([orgId, name])
+  @@index([orgId])
+}
+
+model TeamMember {
+  id       String   @id @default(cuid())
+  teamId   String
+  team     Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isLead   Boolean  @default(false)
+  joinedAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([userId])
+}
+
+// ===========================================================================
+// Documents
+// ===========================================================================
+
+model Document {
+  id             String         @id @default(cuid())
+  orgId          String
+  org            Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdById    String?
+  createdBy      User?          @relation("DocumentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  title          String
+  description    String?
+  s3Key          String         @unique
+  sha256         String
+  size           Int
+  mime           String
+  status         DocumentStatus @default(UPLOADING)
+  folder         String         @default("/")
+  tags           String[]       @default([])
+  /// ISO-8601 duration or policy id; null = org default retention
+  retentionUntil DateTime?
+  currentVersion Int            @default(1)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  versions  DocumentVersion[]
+  envelopes Envelope[]
+  comments  Comment[]
+
+  @@index([orgId, status])
+  @@index([orgId, folder])
+  @@index([orgId, createdAt])
+  @@index([sha256])
+  @@index([createdById])
+}
+
+model DocumentVersion {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  version     Int
+  s3Key       String   @unique
+  sha256      String
+  size        Int
+  mime        String
+  changeNote  String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([documentId, version])
+  @@index([documentId])
+}
+
+// ===========================================================================
+// Envelopes (signature requests)
+// ===========================================================================
+
+model Envelope {
+  id             String         @id @default(cuid())
+  orgId          String
+  org            Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  documentId     String
+  document       Document       @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  createdById    String?
+  createdBy      User?          @relation("EnvelopeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  title          String
+  message        String?
+  status         EnvelopeStatus @default(DRAFT)
+  signingOrder   SigningOrder   @default(SEQUENTIAL)
+  expiresAt      DateTime?
+  /// { intervalHours: number, maxReminders: number }
+  reminderConfig Json?
+  sentAt         DateTime?
+  completedAt    DateTime?
+  voidedAt       DateTime?
+  voidReason     String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  signers EnvelopeSigner[]
+  fields  SignatureField[]
+
+  @@index([orgId, status])
+  @@index([orgId, createdAt])
+  @@index([documentId])
+  @@index([createdById])
+  @@index([expiresAt])
+}
+
+model EnvelopeSigner {
+  id            String           @id @default(cuid())
+  envelopeId    String
+  envelope      Envelope         @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  /// Registered platform user if any; external signers only have email
+  userId        String?
+  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email         String
+  fullName      String
+  /// 1-based position for SEQUENTIAL signing; ignored for PARALLEL
+  order         Int              @default(1)
+  status        SignerStatus     @default(PENDING)
+  channel       SignerChannel    @default(EMAIL)
+  authMethod    SignerAuthMethod @default(EMAIL_OTP)
+  /// One-time signing link token hash
+  accessTokenHash String?        @unique
+  notifiedAt    DateTime?
+  viewedAt      DateTime?
+  consentedAt   DateTime?
+  signedAt      DateTime?
+  declinedAt    DateTime?
+  declineReason String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  fields     SignatureField[]
+  signatures Signature[]
+
+  @@unique([envelopeId, email])
+  @@index([envelopeId, order])
+  @@index([userId])
+  @@index([email])
+}
+
+model SignatureField {
+  id         String             @id @default(cuid())
+  envelopeId String
+  envelope   Envelope           @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+  signerId   String
+  signer     EnvelopeSigner     @relation(fields: [signerId], references: [id], onDelete: Cascade)
+  type       SignatureFieldType
+  page       Int
+  x          Float
+  y          Float
+  w          Float
+  h          Float
+  required   Boolean            @default(true)
+  /// Filled value for TEXT/DATE/CHECKBOX fields
+  value      String?
+  createdAt  DateTime           @default(now())
+
+  @@index([envelopeId])
+  @@index([signerId])
+}
+
+model Signature {
+  id             String        @id @default(cuid())
+  signerId       String
+  signer         EnvelopeSigner @relation(fields: [signerId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type           SignatureType @default(SIMPLE)
+  certificateId  String?
+  certificate    Certificate?  @relation(fields: [certificateId], references: [id], onDelete: SetNull)
+  /// sha256 of the exact document bytes that were signed
+  signedHash     String
+  /// PKCS#7/CMS detached signature (base64 DER)
+  cmsSignature   String?
+  /// RFC 3161 timestamp token (base64) — TODO: qualified TSA integration
+  timestampToken String?
+  /// Long-term validation data: OCSP responses, CRLs, cert chain
+  ltvData        Json?
+  ip             String?
+  userAgent      String?
+  /// { lat, lng, accuracy, country } when signer consents to geolocation
+  geo            Json?
+  createdAt      DateTime      @default(now())
+
+  @@index([signerId])
+  @@index([userId])
+  @@index([certificateId])
+  @@index([signedHash])
+}
+
+// ===========================================================================
+// PKI
+// ===========================================================================
+
+model Certificate {
+  id           String            @id @default(cuid())
+  orgId        String?
+  org          Organization?     @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  userId       String?
+  user         User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type         CertificateType   @default(END_ENTITY)
+  subjectDn    String
+  issuerDn     String
+  serial       String            @unique
+  notBefore    DateTime
+  notAfter     DateTime
+  status       CertificateStatus @default(ACTIVE)
+  keyAlgorithm KeyAlgorithm      @default(RSA_2048)
+  publicKeyPem String
+  certPem      String
+  /// PEM chain up to (excluding) the root
+  issuerChain  String?
+  /// sha256 fingerprint of DER encoding
+  fingerprint  String            @unique
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  issuedFromRequest CertificateRequest? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+  requestId         String?             @unique
+  revocation        RevocationEntry?
+  signatures        Signature[]
+
+  @@index([orgId, status])
+  @@index([userId])
+  @@index([notAfter])
+}
+
+model CertificateRequest {
+  id           String                   @id @default(cuid())
+  orgId        String
+  org          Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  csrPem       String
+  subjectDn    String
+  keyAlgorithm KeyAlgorithm             @default(RSA_2048)
+  status       CertificateRequestStatus @default(PENDING)
+  rejectReason String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  certificate Certificate?
+
+  @@index([orgId, status])
+  @@index([userId])
+}
+
+model RevocationEntry {
+  id            String           @id @default(cuid())
+  certificateId String           @unique
+  certificate   Certificate      @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+  serial        String
+  reason        RevocationReason @default(UNSPECIFIED)
+  revokedAt     DateTime         @default(now())
+  revokedById   String?
+
+  @@index([serial])
+  @@index([revokedAt])
+}
+
+// ===========================================================================
+// Identity verification (KYC)
+// ===========================================================================
+
+model IdentityVerification {
+  id              String                     @id @default(cuid())
+  orgId           String
+  org             Organization               @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  /// For external signers verified without an account
+  subjectEmail    String?
+  status          IdentityVerificationStatus @default(CREATED)
+  method          IdentityVerificationMethod @default(DOCUMENT_AND_SELFIE)
+  provider        String                     @default("mock")
+  providerRef     String?
+  confidenceScore Float?
+  /// e.g. ["DOCUMENT_EXPIRED", "FACE_MISMATCH", "SANCTIONS_HIT"]
+  riskFlags       Json                       @default("[]")
+  completedAt     DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  documents IdentityDocument[]
+
+  @@index([orgId, status])
+  @@index([userId])
+  @@index([providerRef])
+}
+
+model IdentityDocument {
+  id             String               @id @default(cuid())
+  verificationId String
+  verification   IdentityVerification @relation(fields: [verificationId], references: [id], onDelete: Cascade)
+  type           IdentityDocumentType
+  frontS3Key     String
+  backS3Key      String?
+  selfieS3Key    String?
+  /// Extracted fields: names, document number, dob, expiry, MRZ…
+  ocrData        Json?
+  faceMatchScore Float?
+  livenessScore  Float?
+  createdAt      DateTime             @default(now())
+
+  @@index([verificationId])
+}
+
+// ===========================================================================
+// Workflows
+// ===========================================================================
+
+model Workflow {
+  id          String         @id @default(cuid())
+  orgId       String
+  org         Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  status      WorkflowStatus @default(DRAFT)
+  version     Int            @default(1)
+  /// Trigger definition: { type: "manual" | "document.uploaded" | ... }
+  trigger     Json           @default("{\"type\":\"manual\"}")
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  steps WorkflowStep[]
+  runs  WorkflowRun[]
+
+  @@unique([orgId, name, version])
+  @@index([orgId, status])
+}
+
+model WorkflowStep {
+  id         String           @id @default(cuid())
+  workflowId String
+  workflow   Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  name       String
+  type       WorkflowStepType
+  position   Int
+  /// Step-type-specific config (assignees, templates, urls…)
+  config     Json             @default("{}")
+  /// JSON condition tree evaluated against the run context; step is
+  /// skipped when it evaluates to false. Null = always run.
+  condition  Json?
+  createdAt  DateTime         @default(now())
+
+  runSteps WorkflowRunStep[]
+
+  @@unique([workflowId, position])
+  @@index([workflowId])
+}
+
+model WorkflowRun {
+  id          String            @id @default(cuid())
+  workflowId  String
+  workflow    Workflow          @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  orgId       String
+  org         Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  status      WorkflowRunStatus @default(PENDING)
+  /// Mutable run context available to condition evaluation
+  context     Json              @default("{}")
+  startedById String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  error       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  steps WorkflowRunStep[]
+
+  @@index([orgId, status])
+  @@index([workflowId])
+}
+
+model WorkflowRunStep {
+  id         String                @id @default(cuid())
+  runId      String
+  run        WorkflowRun           @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepId     String
+  step       WorkflowStep          @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  status     WorkflowRunStepStatus @default(PENDING)
+  /// Step output merged into run context on completion
+  output     Json?
+  error      String?
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime              @default(now())
+
+  @@unique([runId, stepId])
+  @@index([runId, status])
+}
+
+// ===========================================================================
+// Collaboration
+// ===========================================================================
+
+model Task {
+  id           String       @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  status       TaskStatus   @default(OPEN)
+  priority     TaskPriority @default(MEDIUM)
+  assigneeId   String?
+  assignee     User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  createdById  String?
+  createdBy    User?        @relation("TaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  dueAt        DateTime?
+  /// Optional link to the resource this task concerns
+  resourceType String?
+  resourceId   String?
+  completedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  comments Comment[]
+
+  @@index([orgId, status])
+  @@index([assigneeId, status])
+  @@index([resourceType, resourceId])
+}
+
+model Comment {
+  id         String    @id @default(cuid())
+  authorId   String
+  author     User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body       String
+  documentId String?
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  taskId     String?
+  task       Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  @@index([documentId])
+  @@index([taskId])
+  @@index([authorId])
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  orgId     String?
+  org       Organization?       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel @default(IN_APP)
+  status    NotificationStatus  @default(PENDING)
+  title     String
+  body      String
+  /// Deep-link payload: { resourceType, resourceId, url }
+  data      Json?
+  readAt    DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, status])
+  @@index([orgId])
+  @@index([createdAt])
+}
+
+// ===========================================================================
+// Platform: API keys, webhooks, audit
+// ===========================================================================
+
+model ApiKey {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  name        String
+  /// First 8 chars of the key, shown in the UI for identification
+  prefix      String
+  /// sha256 of the full key — raw key shown once at creation
+  hashedKey   String       @unique
+  scopes      String[]     @default([])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime     @default(now())
+
+  @@index([orgId])
+  @@index([prefix])
+}
+
+model Webhook {
+  id         String       @id @default(cuid())
+  orgId      String
+  org        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  url        String
+  /// HMAC-SHA256 signing secret
+  secret     String
+  /// Subscribed event names, e.g. ["envelope.completed", "document.uploaded"]
+  events     String[]     @default([])
+  active     Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([orgId, active])
+}
+
+model WebhookDelivery {
+  id           String                @id @default(cuid())
+  webhookId    String
+  webhook      Webhook               @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  eventName    String
+  payload      Json
+  status       WebhookDeliveryStatus @default(PENDING)
+  attempts     Int                   @default(0)
+  lastAttemptAt DateTime?
+  responseCode Int?
+  responseBody String?
+  nextRetryAt  DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([webhookId, status])
+  @@index([eventName])
+  @@index([createdAt])
+}
+
+/// Append-only, hash-chained audit log. Each event's `hash` is
+/// sha256(prevHash + canonicalJson(event core fields)), forming a
+/// tamper-evident chain per `chainKey` (= tenantId, or "platform" for
+/// tenant-less events like login attempts). Rows are never updated/deleted.
+model AuditEvent {
+  id           String        @id @default(cuid())
+  /// Chain partition: tenantId or "platform"
+  chainKey     String
+  /// Monotonic per-chain sequence number
+  seq          Int
+  tenantId     String?
+  tenant       Organization? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actorId      String?
+  actorType    String        @default("user")
+  action       String
+  resourceType String
+  resourceId   String?
+  ip           String?
+  userAgent    String?
+  metadata     Json          @default("{}")
+  prevHash     String
+  hash         String        @unique
+  createdAt    DateTime      @default(now())
+
+  @@unique([chainKey, seq])
+  @@index([tenantId, createdAt])
+  @@index([tenantId, action])
+  @@index([tenantId, resourceType, resourceId])
+  @@index([actorId])
+}
+
+// ===========================================================================
+// Billing
+// ===========================================================================
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  orgId              String
+  org                Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  plan               OrgPlan
+  status             SubscriptionStatus @default(TRIALING)
+  seats              Int                @default(1)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  /// External payment provider reference (e.g. Stripe subscription id)
+  providerRef        String?            @unique
+  trialEndsAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  invoices Invoice[]
+
+  @@index([orgId, status])
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  orgId          String
+  org            Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  number         String        @unique
+  status         InvoiceStatus @default(DRAFT)
+  currency       String        @default("DZD")
+  /// Amounts in minor units (centimes)
+  subtotal       Int
+  tax            Int           @default(0)
+  total          Int
+  /// [{ description, quantity, unitAmount, amount }]
+  lines          Json          @default("[]")
+  providerRef    String?       @unique
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([orgId, status])
+}
+
+model UsageRecord {
+  id          String       @id @default(cuid())
+  orgId       String
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  metric      UsageMetric
+  quantity    Int
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime     @default(now())
+
+  @@unique([orgId, metric, periodStart])
+  @@index([orgId, metric])
+}
+
+model FeatureFlag {
+  id          String        @id @default(cuid())
+  key         String
+  /// Null orgId = global default flag
+  orgId       String?
+  org         Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  enabled     Boolean       @default(false)
+  /// Optional rollout / targeting config
+  payload     Json?
+  description String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([key, orgId])
+  @@index([key])
+}

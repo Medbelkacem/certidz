@@ -1,0 +1,135 @@
+# =============================================================================
+# CertiDZ by HISN — Prometheus scrape configuration
+# -----------------------------------------------------------------------------
+# Works in two deployment shapes:
+#   * Single-VM / docker-compose: the static_configs targets below resolve via
+#     the compose network (service names) or host ports.
+#   * Kubernetes: the same job names are produced by kubernetes_sd_configs when
+#     Prometheus runs in-cluster (the static blocks are ignored because the
+#     matching Services are scraped by the SD relabel rules). Keep both so the
+#     file is valid and useful in either environment.
+#
+# Alert rules live in ./alerts.yml (rule_files below). Alertmanager routing is
+# defined separately (Alertmanager config, not shipped here).
+#
+# Reference: docs/operations/MONITORING.md
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: certidz-production
+    region: dz-alger-1
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager.observability.svc.cluster.local:9093
+
+scrape_configs:
+  # ---------------------------------------------------------------------------
+  # Prometheus self-monitoring
+  # ---------------------------------------------------------------------------
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ---------------------------------------------------------------------------
+  # CertiDZ API (NestJS) — exposes Prometheus metrics at /api/v1/metrics on :4000
+  # ---------------------------------------------------------------------------
+  - job_name: certidz-api
+    metrics_path: /api/v1/metrics
+    scheme: http
+    static_configs:
+      - targets: ["certidz-api.certidz.svc.cluster.local:4000"]
+        labels:
+          service: api
+          component: backend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+
+  # ---------------------------------------------------------------------------
+  # CertiDZ Web (Next.js) — runtime metrics exposed at /metrics on :3000
+  # ---------------------------------------------------------------------------
+  - job_name: certidz-web
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets: ["certidz-web.certidz.svc.cluster.local:3000"]
+        labels:
+          service: web
+          component: frontend
+
+  # ---------------------------------------------------------------------------
+  # node-exporter — host/USE metrics (CPU, mem, disk, net) on every node
+  # ---------------------------------------------------------------------------
+  - job_name: node-exporter
+    static_configs:
+      - targets:
+          - "node-exporter.observability.svc.cluster.local:9100"
+        labels:
+          service: node
+
+  # ---------------------------------------------------------------------------
+  # postgres-exporter — PostgreSQL 16 (Patroni HA): replication lag, connections
+  # ---------------------------------------------------------------------------
+  - job_name: postgres-exporter
+    static_configs:
+      - targets:
+          - "postgres-exporter.data.svc.cluster.local:9187"
+        labels:
+          service: postgres
+
+  # ---------------------------------------------------------------------------
+  # redis-exporter — Redis 7 (BullMQ queues + cache)
+  # ---------------------------------------------------------------------------
+  - job_name: redis-exporter
+    static_configs:
+      - targets:
+          - "redis-exporter.data.svc.cluster.local:9121"
+        labels:
+          service: redis
+
+  # ---------------------------------------------------------------------------
+  # kube-state-metrics — pod/deployment/restart state (PodCrashLooping, etc.)
+  # ---------------------------------------------------------------------------
+  - job_name: kube-state-metrics
+    static_configs:
+      - targets:
+          - "kube-state-metrics.observability.svc.cluster.local:8080"
+        labels:
+          service: kube-state-metrics
+
+  # ---------------------------------------------------------------------------
+  # blackbox-exporter — external uptime / TLS-expiry probes over HTTPS.
+  # The probe target is passed as the __param_target; blackbox does the request
+  # and Prometheus scrapes blackbox, not the site directly.
+  # ---------------------------------------------------------------------------
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://app.certidz.dz/api/v1/health
+          - https://app.certidz.dz/
+          - https://verify.certidz.dz/          # verification portal — must stay read-available
+          - https://tsa.certidz.dz/
+          - https://ocsp.certidz.dz/
+          - https://crl.certidz.dz/
+        labels:
+          probe: uptime
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter.observability.svc.cluster.local:9115

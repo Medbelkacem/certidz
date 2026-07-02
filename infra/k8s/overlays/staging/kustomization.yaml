@@ -1,0 +1,50 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Staging: functionally identical to production, smaller resource tier, its own
+# namespace and hostname. Kustomize's namespace transformer also renames the
+# Namespace object itself.
+namespace: certidz-staging
+
+resources:
+  - ../../base
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/environment: staging
+
+images:
+  # CD replaces this tag with the immutable image built for the release branch,
+  # e.g. sha-4f2a91c (kustomize edit set image ... in the deploy workflow).
+  - name: ghcr.io/hisn/certidz-api
+    newTag: staging
+  - name: ghcr.io/hisn/certidz-web
+    newTag: staging
+
+patches:
+  - path: patch-api-resources.yaml
+    target:
+      kind: Deployment
+      name: certidz-api
+  - path: patch-web-resources.yaml
+    target:
+      kind: Deployment
+      name: certidz-web
+  - path: patch-ingress.yaml
+    target:
+      kind: Ingress
+      name: certidz
+  - path: patch-hpa.yaml
+    target:
+      kind: HorizontalPodAutoscaler
+      name: certidz-api
+  - path: patch-hpa-web.yaml
+    target:
+      kind: HorizontalPodAutoscaler
+      name: certidz-web
+  # Environment-specific non-secret overrides merged over the base ConfigMap.
+  - path: patch-configmap.yaml
+    target:
+      kind: ConfigMap
+      name: certidz-config

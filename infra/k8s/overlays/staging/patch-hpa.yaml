@@ -1,0 +1,8 @@
+# Cap staging autoscaling so a load test cannot consume the shared cluster.
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: certidz-api
+spec:
+  minReplicas: 2
+  maxReplicas: 4
